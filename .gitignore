@@ -1,0 +1,16 @@
+# Visual Studio 관련 파일
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# 빌드 파일
+x64/
+x86/
+*.obj
+*.exe
+*.dll
+*.pdb
+*.ipch
+*.cache
