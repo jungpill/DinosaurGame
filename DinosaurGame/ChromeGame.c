@@ -7,15 +7,64 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define DINO_BOTTOM_Y 18  // 사람 위치를 장애물과 맞추기 위해 조정
-#define TREE_BOTTOM_Y 20  // 장애물 위치
+#define DINO_BOTTOM_Y 18
+#define TREE_BOTTOM_Y 20
 #define TREE_BOTTOM_X 45
-#define JUMP_LIMIT 3      // 점프 높이 (1단 점프 기준)
+#define JUMP_LIMIT 3
+#define MAX_RANKINGS 5
 
-//재시작 시 스코어 초기화 등 개선할점 있음
+typedef struct {
+    char initials[4];
+    int score;
+    char date[20];
+} Ranking;
 
+Ranking rankings[MAX_RANKINGS] = { 0 };
 int score = 0;
 clock_t lastScoreTime = 0;
+
+void GetCurrentDate(char* buffer, size_t size) {
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    snprintf(buffer, size, "%04d-%02d-%02d %02d:%02d:%02d",
+        tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+        tm.tm_hour, tm.tm_min, tm.tm_sec);
+}
+
+void SaveRanking(const char* initials, int score) {
+    char currentDate[20];
+    GetCurrentDate(currentDate, sizeof(currentDate));
+
+    for (int i = 0; i < MAX_RANKINGS; i++) {
+        if (rankings[i].score == 0) {
+            snprintf(rankings[i].initials, sizeof(rankings[i].initials), "%s", initials);
+            rankings[i].score = score;
+            snprintf(rankings[i].date, sizeof(rankings[i].date), "%s", currentDate);
+            break;
+        }
+    }
+
+    for (int i = 0; i < MAX_RANKINGS - 1; i++) {
+        for (int j = i + 1; j < MAX_RANKINGS; j++) {
+            if (rankings[j].score > rankings[i].score) {
+                Ranking temp = rankings[i];
+                rankings[i] = rankings[j];
+                rankings[j] = temp;
+            }
+        }
+    }
+}
+
+void DisplayRankings() {
+    system("cls");
+    printf("\n===== Rankings =====\n");
+    for (int i = 0; i < MAX_RANKINGS; i++) {
+        if (rankings[i].score > 0) {
+            printf("%d. %s - %d점 (%s)\n", i + 1, rankings[i].initials, rankings[i].score, rankings[i].date);
+        }
+    }
+    printf("\n게임을 다시 시작하려면 r, 종료하려면 n을 누르세요: ");
+}
 
 void SetConsoleView() {
     system("mode con:cols=100 lines=25");
@@ -29,40 +78,27 @@ void GotoXY(int x, int y) {
     SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), Pos);
 }
 
-
 int GetKeyDown() {
     if (_kbhit() != 0) {
         int key = _getch();
-        if (key == 32) {  // 스페이스바
-            return key;
-        }
-        else if (key == 0 || key == 224) {  // 특수 키 (방향키 포함)
+        if (key == 32) return key;
+        else if (key == 0 || key == 224) {
             key = _getch();
-            if (key == 72) {  // 방향키 위
-                return key;
-            }
+            if (key == 72) return key;
         }
     }
     return 0;
 }
 
-// 사람 모양 그리기
 void DrawDino(int dinoY) {
     GotoXY(0, dinoY);
     static bool legFlag = true;
-    printf("   O   \n");       // 머리
-    printf("  /|\\ \n");       // 팔과 몸통
-    if (legFlag) {
-        printf(" /   \\\n");   // 움직이는 다리 1
-        legFlag = false;
-    }
-    else {
-        printf("  \\ /\n");   // 움직이는 다리 2
-        legFlag = true;
-    }
+    printf("   O   \n");
+    printf("  /|\\ \n");
+    printf(legFlag ? " /   \\\n" : "  \\ /\n");
+    legFlag = !legFlag;
 }
 
-// 사람 위치 지우기
 void ClearDino(int dinoY) {
     for (int i = 0; i < 3; i++) {
         GotoXY(0, dinoY + i);
@@ -70,26 +106,37 @@ void ClearDino(int dinoY) {
     }
 }
 
-// 장애물 그리기
 void DrawTree(int treeX, int height) {
     for (int i = 0; i < height; i++) {
         GotoXY(treeX, TREE_BOTTOM_Y - i);
-        printf("$$$"); // 두께를 3으로 설정
+        printf("$$$");
     }
 }
 
-// 장애물 지우기 (두께 3에 맞춰 공백 출력)
 void ClearTree(int treeX, int height) {
     for (int i = 0; i < height; i++) {
         GotoXY(treeX, TREE_BOTTOM_Y - i);
-        printf("   "); // 두께에 맞춰 공백 출력
+        printf("   ");
     }
 }
 
-// 충돌 감지 함수
 bool CheckCollision(int dinoY, int treeX, int obstacleHeight) {
-    // 사람의 위치와 장애물 위치가 겹치는지 확인
     return (treeX <= 2 && treeX >= 0 && dinoY >= TREE_BOTTOM_Y - obstacleHeight);
+}
+
+void ResetGame(int* dinoY, int* treeX, int* obstacleHeight) {
+    score = 0; // 점수 초기화
+    lastScoreTime = clock(); // 점수 계산 시간 초기화
+    *dinoY = DINO_BOTTOM_Y; // 공룡 위치 초기화
+    *treeX = TREE_BOTTOM_X; // 장애물 위치 초기화
+    *obstacleHeight = 4 + (rand() % 4) * 2; // 장애물 높이 랜덤 설정
+}
+
+void MoveCursorTo(int x, int y) {
+    COORD Pos;
+    Pos.X = 2 * x;
+    Pos.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), Pos);
 }
 
 void UpdateScore() {
@@ -99,23 +146,24 @@ void UpdateScore() {
     if ((double)(currentTime - lastScoreTime) / CLOCKS_PER_SEC >= 0.5) {
         score += 1;
         lastScoreTime = currentTime; // 마지막 점수 업데이트 시간 갱신
-
-        // 점수 출력
-        GotoXY(0, 22);  // 원하는 위치로 이동하여 점수 출력
-        printf("Score: %d", score);
     }
+
+    // 점수 출력
+    MoveCursorTo(0, 22); // 출력 위치
+    printf("Score: %d", score);
 }
+
 
 int main(void) {
     SetConsoleView();
-    srand(time(NULL)); // 난수 시드 설정 (프로그램 시작 시 한 번만 호출)
+    srand(time(NULL));
 
     bool isJumping = false;
     bool isBottom = true;
-    const int gravity = 2; // 중력을 낮춰 점프 속도를 줄임
-    int jumpCount = 0;     // 점프 높이 제한을 위한 카운트
-    bool isDoubleJump = false; // 2단 점프 가능 여부
-    int obstacleHeight = 4 + (rand() % 4) * 2; // 4, 6, 8, 또는 10의 높이로 랜덤 설정
+    const int gravity = 2;
+    int jumpCount = 0;
+    bool isDoubleJump = false;
+    int obstacleHeight = 4 + (rand() % 4) * 2;
 
     int dinoY = DINO_BOTTOM_Y;
     int treeX = TREE_BOTTOM_X;
@@ -124,65 +172,68 @@ int main(void) {
         UpdateScore();
         int key = GetKeyDown();
         if ((key == 32 || key == 72) && (isBottom || isDoubleJump)) {
-            if (isBottom) { // 바닥에서 첫 점프
+            if (isBottom) {
                 isJumping = true;
                 isBottom = false;
-                isDoubleJump = true; // 2단 점프 가능
+                isDoubleJump = true;
                 jumpCount = 0;
             }
-            else if (isDoubleJump) { // 공중에서 2단 점프
+            else if (isDoubleJump) {
                 isJumping = true;
-                isDoubleJump = false; // 더 이상 점프 불가
+                isDoubleJump = false;
                 jumpCount = 0;
             }
         }
 
-        // 점프 중이면 Y 감소 (위로 이동)
         if (isJumping && jumpCount < JUMP_LIMIT) {
-            ClearDino(dinoY); // 현재 위치 지우기
-            dinoY -= gravity; // 위로 이동
-            jumpCount++;      // 점프 높이 증가
+            ClearDino(dinoY);
+            dinoY -= gravity;
+            jumpCount++;
         }
         else {
             isJumping = false;
-            ClearDino(dinoY); // 현재 위치 지우기
-            dinoY += gravity; // 아래로 이동
+            ClearDino(dinoY);
+            dinoY += gravity;
         }
 
-        // 바닥에 도달했을 때 위치 고정 및 상태 초기화
         if (dinoY >= DINO_BOTTOM_Y) {
             dinoY = DINO_BOTTOM_Y;
             isBottom = true;
-            isDoubleJump = false; // 바닥에 닿으면 다시 2단 점프 가능
+            isDoubleJump = false;
         }
 
-        // 장애물 이동
-        ClearTree(treeX, obstacleHeight); // 장애물 현재 위치 지우기
+        ClearTree(treeX, obstacleHeight);
         treeX -= 2;
         if (treeX <= 0) {
             treeX = TREE_BOTTOM_X;
-            obstacleHeight = 3 + (rand() % 4) * 2; // 4, 6, 8, 또는 10의 높이로 랜덤 설정
+            obstacleHeight = 4 + (rand() % 4) * 2;
         }
 
-        // 사람과 장애물 그리기
         DrawDino(dinoY);
         DrawTree(treeX, obstacleHeight);
 
-        // 충돌 감지
         if (CheckCollision(dinoY, treeX, obstacleHeight)) {
-            GotoXY(0, 23);
-            printf("Game Over!\n"); // 게임 오버 메시지
-            printf("게임을 종료하려면 n을 누르세요");
+            MoveCursorTo(0, 23);
+            printf("Game Over!\n");
+            printf("이름 이니셜을 입력하세요 (최대 3글자): ");
+            char initials[4];
+            scanf("%3s", initials);
+            SaveRanking(initials, score);
+
+            DisplayRankings();
+
             char retry = _getch();
-            if (retry == 'n') {
-                break;
+            if (retry == 'n') break;
+            else if (retry == 'r') {
+                ResetGame(&dinoY, &treeX, &obstacleHeight);
+                system("cls");
             }
-            
         }
 
         Sleep(80);
     }
 
-    system("pause");
     return 0;
 }
+
+
